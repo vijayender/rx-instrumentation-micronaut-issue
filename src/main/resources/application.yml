@@ -1,0 +1,8 @@
+micronaut:
+    application:
+        name: rxissuekotlin
+tracing:
+    zipkin:
+        enabled: true
+    jaeger:
+        enabled: true
