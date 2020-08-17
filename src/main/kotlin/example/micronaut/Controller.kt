@@ -45,28 +45,7 @@ typealias TokenDetail = String
 class Controller(
         private val executorService2: ExecutorService,
         private val theBean: TheBean
-) : CoroutineScope {
-
-    val executorService = Executors.newWorkStealingPool()
-
-    override val coroutineContext: CoroutineContext = object : CoroutineDispatcher() {
-        override fun dispatch(context: CoroutineContext, block: Runnable) {
-            executorService.execute(block)
-        }
-    }
-
-    val stream: Observable<TokenDetail> by lazy {
-        requestNextToken(0).replay(1).autoConnect()
-    }
-
-    fun current() = stream.take(1).singleOrError()!!
-
-    private fun requestNextToken(idx: Long): Observable<TokenDetail> {
-        return Observable.just(idx).map {
-            Thread.sleep(5000)
-            "idx + $it"
-        }.subscribeOn(Schedulers.io())
-    }
+)  {
 
     @Get("/tryout/")
     fun tryout() = theBean.thePojo
