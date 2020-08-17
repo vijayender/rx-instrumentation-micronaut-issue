@@ -1,29 +1,58 @@
 package example.micronaut
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import io.micronaut.http.annotation.Controller
 import io.micronaut.http.annotation.Get
-import io.micronaut.http.annotation.QueryValue
+import io.micronaut.http.client.annotation.Client
 import io.reactivex.Observable
 import io.reactivex.schedulers.Schedulers
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Runnable
-import kotlinx.coroutines.async
-import kotlinx.coroutines.future.asCompletableFuture
-import kotlinx.coroutines.rx2.await
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import javax.annotation.PostConstruct
+import javax.inject.Singleton
 import kotlin.coroutines.CoroutineContext
+
+// bean with cyclic dependency fails during test
+
+data class ThePojo(
+        val x: Int
+)
+
+@Client("http://localhost:8081")
+interface TheClient {
+    @Get("/")
+    fun getSome(): CompletableFuture<ThePojo>
+}
+
+@Singleton
+class TheBean(
+        //objectMapper: ObjectMapper,
+        private val theClient: TheClient
+) {
+    var thePojo: ThePojo = ThePojo(-10)
+    @PostConstruct
+    fun init() {
+        thePojo = theClient.getSome().get()
+    }
+}
 
 typealias TokenDetail = String
 @Controller
-class Controller(private val executorService: ExecutorService) : CoroutineScope {
+class Controller(
+        private val executorService2: ExecutorService,
+        private val theBean: TheBean
+) : CoroutineScope {
+
+    val executorService = Executors.newWorkStealingPool()
 
     override val coroutineContext: CoroutineContext = object : CoroutineDispatcher() {
         override fun dispatch(context: CoroutineContext, block: Runnable) {
             executorService.execute(block)
         }
-
     }
 
     val stream: Observable<TokenDetail> by lazy {
@@ -39,16 +68,6 @@ class Controller(private val executorService: ExecutorService) : CoroutineScope 
         }.subscribeOn(Schedulers.io())
     }
 
-    @Get("/tryout/{times}")
-    fun tryout(@QueryValue("times") times: Int) = asyncResult {
-        (1..times).map {
-            async { current().await() }
-        }.map {
-            it.await()
-        }
-    }
-
-    private fun <T> asyncResult(block: suspend CoroutineScope.() -> T): CompletableFuture<T> {
-        return async { block() }.asCompletableFuture()
-    }
+    @Get("/tryout/")
+    fun tryout() = theBean.thePojo
 }
